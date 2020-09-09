@@ -1,4 +1,4 @@
-This project was forked from "gopkg.in/natefinch/lumberjack"
+This project was forked from `gopkg.in/natefinch/lumberjack`
 
 ### Nanojack is a Go package for writing logs to rolling files.
 
