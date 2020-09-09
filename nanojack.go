@@ -31,7 +31,7 @@ import (
 
 const (
 	backupTimeFormat = "2006-01-02T15-04-05.000"
-	defaultMaxSize   = 100
+	defaultMaxLines  = 10
 )
 
 // ensure we always implement io.WriteCloser
@@ -40,13 +40,13 @@ var _ io.WriteCloser = (*Logger)(nil)
 // Logger is an io.WriteCloser that writes to the specified filename.
 //
 // Logger opens or creates the logfile on first Write.  If the file exists and
-// is less than MaxSize megabytes, nanojack will open and append to that file.
-// If the file exists and its size is >= MaxSize megabytes, the file is renamed
+// is less than MaxLines megabytes, nanojack will open and append to that file.
+// If the file exists and its size is >= MaxLines megabytes, the file is renamed
 // by putting the current time in a timestamp in the name immediately before the
 // file's extension (or the end of the filename if there's no extension). A new
 // log file is then created using original filename.
 //
-// Whenever a write would cause the current log file exceed MaxSize megabytes,
+// Whenever a write would cause the current log file exceed MaxLines,
 // the current file is closed, renamed, and a new log file created with the
 // original name. Thus, the filename you give Logger is always the "current" log
 // file.
@@ -64,30 +64,27 @@ var _ io.WriteCloser = (*Logger)(nil)
 // Whenever a new logfile gets created, old log files may be deleted.  The most
 // recent files according to the encoded timestamp will be retained, up to a
 // number equal to MaxBackups (or all of them if MaxBackups is 0).  Any files
-// with an encoded timestamp older than MaxAge days are deleted, regardless of
+// with an encoded timestamp older than MaxNano nanoseconds are deleted, regardless of
 // MaxBackups.  Note that the time encoded in the timestamp is the rotation
 // time, which may differ from the last time that file was written to.
 //
-// If MaxBackups and MaxAge are both 0, no old log files will be deleted.
+// If MaxBackups and MaxNano are both 0, no old log files will be deleted.
 type Logger struct {
 	// Filename is the file to write logs to.  Backup log files will be retained
 	// in the same directory.  It uses <processname>-nanojack.log in
 	// os.TempDir() if empty.
 	Filename string `json:"filename" yaml:"filename"`
 
-	// MaxSize is the maximum size in megabytes of the log file before it gets
-	// rotated. It defaults to 100 megabytes.
-	MaxSize int `json:"maxsize" yaml:"maxsize"`
+	// MaxLines is the maximum lines to the log file before it gets rotated.
+	// It defaults to 10 lines.
+	MaxLines int `json:"maxlines" yaml:"maxlines"`
 
-	// MaxAge is the maximum number of days to retain old log files based on the
-	// timestamp encoded in their filename.  Note that a day is defined as 24
-	// hours and may not exactly correspond to calendar days due to daylight
-	// savings, leap seconds, etc. The default is not to remove old log files
-	// based on age.
-	MaxAge int `json:"maxage" yaml:"maxage"`
+	// MaxNano is the maximum duration to retain old log files based on the timestamp
+	// encoded in their filename. The default is not to remove old log files based on age.
+	MaxNano int `json:"maxnano" yaml:"maxnano"`
 
 	// MaxBackups is the maximum number of old log files to retain.  The default
-	// is to retain all old log files (though MaxAge may still cause them to get
+	// is to retain all old log files (though MaxNano may still cause them to get
 	// deleted.)
 	MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
 
@@ -96,9 +93,9 @@ type Logger struct {
 	// time.
 	LocalTime bool `json:"localtime" yaml:"localtime"`
 
-	size int64
-	file *os.File
-	mu   sync.Mutex
+	lines int64
+	file  *os.File
+	mu    sync.Mutex
 }
 
 var (
@@ -107,42 +104,30 @@ var (
 
 	// os_Stat exists so it can be mocked out by tests.
 	os_Stat = os.Stat
-
-	// megabyte is the conversion factor between MaxSize and bytes.  It is a
-	// variable so tests can mock it out and not need to write megabytes of data
-	// to disk.
-	megabyte = 1024 * 1024
 )
 
 // Write implements io.Writer.  If a write would cause the log file to be larger
-// than MaxSize, the file is closed, renamed to include a timestamp of the
+// than MaxLines, the file is closed, renamed to include a timestamp of the
 // current time, and a new log file is created using the original log file name.
-// If the length of the write is greater than MaxSize, an error is returned.
+// If the length of the write is greater than MaxLines, an error is returned.
 func (l *Logger) Write(p []byte) (n int, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	writeLen := int64(len(p))
-	if writeLen > l.max() {
-		return 0, fmt.Errorf(
-			"write length %d exceeds maximum file size %d", writeLen, l.max(),
-		)
-	}
-
 	if l.file == nil {
-		if err = l.openExistingOrNew(len(p)); err != nil {
+		if err = l.openExistingOrNew(); err != nil {
 			return 0, err
 		}
 	}
 
-	if l.size+writeLen > l.max() {
+	if l.lines+1 > l.max() {
 		if err := l.rotate(); err != nil {
 			return 0, err
 		}
 	}
 
 	n, err = l.file.Write(p)
-	l.size += int64(n)
+	l.lines++
 
 	return n, err
 }
@@ -223,7 +208,7 @@ func (l *Logger) openNew() error {
 		return fmt.Errorf("can't open new logfile: %s", err)
 	}
 	l.file = f
-	l.size = 0
+	l.lines = 0
 	return nil
 }
 
@@ -244,10 +229,10 @@ func backupName(name string, local bool) string {
 	return filepath.Join(dir, fmt.Sprintf("%s-%s%s", prefix, timestamp, ext))
 }
 
-// openExistingOrNew opens the logfile if it exists and if the current write
-// would not put it over MaxSize.  If there is no such file or the write would
-// put it over the MaxSize, a new file is created.
-func (l *Logger) openExistingOrNew(writeLen int) error {
+// openExistingOrNew opens the logfile if it exists.
+// If there is no such file or the write would
+// put it over the MaxLines, a new file is created.
+func (l *Logger) openExistingOrNew() error {
 	filename := l.filename()
 	info, err := os_Stat(filename)
 	if os.IsNotExist(err) {
@@ -257,7 +242,7 @@ func (l *Logger) openExistingOrNew(writeLen int) error {
 		return fmt.Errorf("error getting log file info: %s", err)
 	}
 
-	if info.Size()+int64(writeLen) >= l.max() {
+	if info.Size()+1 > l.max() {
 		return l.rotate()
 	}
 
@@ -268,7 +253,12 @@ func (l *Logger) openExistingOrNew(writeLen int) error {
 		return l.openNew()
 	}
 	l.file = file
-	l.size = info.Size()
+	l.lines, err = linesInFile(l.filename())
+	if err != nil {
+		// if we fail to count the lines in the old log file for some reason,
+		// just ignore it and open a new log file.
+		return l.openNew()
+	}
 	return nil
 }
 
@@ -282,9 +272,9 @@ func (l *Logger) filename() string {
 }
 
 // cleanup deletes old log files, keeping at most l.MaxBackups files, as long as
-// none of them are older than MaxAge.
+// none of them are older than MaxNano.
 func (l *Logger) cleanup() error {
-	if l.MaxBackups == 0 && l.MaxAge == 0 {
+	if l.MaxBackups == 0 && l.MaxNano == 0 {
 		return nil
 	}
 
@@ -299,8 +289,8 @@ func (l *Logger) cleanup() error {
 		deletes = files[l.MaxBackups:]
 		files = files[:l.MaxBackups]
 	}
-	if l.MaxAge > 0 {
-		diff := time.Duration(int64(24*time.Hour) * int64(l.MaxAge))
+	if l.MaxNano > 0 {
+		diff := time.Duration(l.MaxNano) * time.Nanosecond
 
 		cutoff := currentTime().Add(-1 * diff)
 
@@ -318,6 +308,15 @@ func (l *Logger) cleanup() error {
 	go deleteAll(l.dir(), deletes)
 
 	return nil
+}
+
+func linesInFile(path string) (int64, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	lines := strings.FieldsFunc(string(content), func(c rune) bool { return c == '\n' })
+	return int64(len(lines)), nil
 }
 
 func deleteAll(dir string, files []logInfo) {
@@ -378,10 +377,10 @@ func (l *Logger) timeFromName(filename, prefix, ext string) string {
 
 // max returns the maximum size in bytes of log files before rolling.
 func (l *Logger) max() int64 {
-	if l.MaxSize == 0 {
-		return int64(defaultMaxSize * megabyte)
+	if l.MaxLines == 0 {
+		return int64(defaultMaxLines)
 	}
-	return int64(l.MaxSize) * int64(megabyte)
+	return int64(l.MaxLines)
 }
 
 // dir returns the directory for the current filename.

@@ -23,7 +23,7 @@ func TestMaintainMode(t *testing.T) {
 	l := &Logger{
 		Filename:   filename,
 		MaxBackups: 1,
-		MaxSize:    100, // megabytes
+		MaxLines:   10,
 	}
 	defer l.Close()
 	b := []byte("boo!")
@@ -62,7 +62,7 @@ func TestMaintainOwner(t *testing.T) {
 	l := &Logger{
 		Filename:   filename,
 		MaxBackups: 1,
-		MaxSize:    100, // megabytes
+		MaxLines:   10,
 	}
 	defer l.Close()
 	b := []byte("boo!")

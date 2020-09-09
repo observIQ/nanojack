@@ -26,9 +26,9 @@ Code:
 ```go
 log.SetOutput(&nanojack.Logger{
     Filename:   "/var/log/myapp/foo.log",
-    MaxWrites:  5,
+    MaxLines:  5,
     MaxBackups: 3,
-    MaxNanos:   1000,
+    MaxNano:     time.Millisecond,
 })
 ```
 
@@ -42,19 +42,16 @@ type Logger struct {
     // os.TempDir() if empty.
     Filename string `json:"filename" yaml:"filename"`
 
-    // MaxSize is the maximum size in megabytes of the log file before it gets
-    // rotated. It defaults to 100 megabytes.
-    MaxSize int `json:"maxsize" yaml:"maxsize"`
+    // MaxLines is the maximum lines written to the log file before it gets rotated.
+    // It defaults to 10 lines.
+    MaxLines int `json:"maxlines" yaml:"maxlines"`
 
-    // MaxAge is the maximum number of days to retain old log files based on the
-    // timestamp encoded in their filename.  Note that a day is defined as 24
-    // hours and may not exactly correspond to calendar days due to daylight
-    // savings, leap seconds, etc. The default is not to remove old log files
-    // based on age.
-    MaxAge int `json:"maxage" yaml:"maxage"`
+    // MaxNano is the maximum time in nanoseconds to retain old log files based on the timestamp
+    // encoded in their filename. The default is not to remove old log files based on age.
+    MaxNano int `json:"maxnano" yaml:"maxnano"`
 
     // MaxBackups is the maximum number of old log files to retain.  The default
-    // is to retain all old log files (though MaxAge may still cause them to get
+    // is to retain all old log files (though MaxNano may still cause them to get
     // deleted.)
     MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
 
@@ -67,14 +64,10 @@ type Logger struct {
 ```
 Logger is an io.WriteCloser that writes to the specified filename.
 
-Logger opens or creates the logfile on first Write.  If the file exists and
-is less than MaxSize megabytes, nanojack will open and append to that file.
-If the file exists and its size is >= MaxSize megabytes, the file is renamed
-by putting the current time in a timestamp in the name immediately before the
-file's extension (or the end of the filename if there's no extension). A new
-log file is then created using original filename.
+Logger opens or creates the logfile on first Write.  If the file exists, 
+nanojack will rotate that file and open a new one.
 
-Whenever a write would cause the current log file exceed MaxSize megabytes,
+Whenever a write would cause the current log file exceed MaxLines megabytes,
 the current file is closed, renamed, and a new log file created with the
 original name. Thus, the filename you give Logger is always the "current" log
 file.
@@ -91,11 +84,11 @@ at 6:30pm on Nov 11 2016 would use the filename
 Whenever a new logfile gets created, old log files may be deleted.  The most
 recent files according to the encoded timestamp will be retained, up to a
 number equal to MaxBackups (or all of them if MaxBackups is 0).  Any files
-with an encoded timestamp older than MaxAge days are deleted, regardless of
+with an encoded timestamp older than MaxNano nanoseconds are deleted, regardless of
 MaxBackups.  Note that the time encoded in the timestamp is the rotation
 time, which may differ from the last time that file was written to.
 
-If MaxBackups and MaxAge are both 0, no old log files will be deleted.
+If MaxBackups and MaxNano are both 0, no old log files will be deleted.
 
 
 
@@ -150,9 +143,8 @@ go func() {
 func (l *Logger) Write(p []byte) (n int, err error)
 ```
 Write implements io.Writer.  If a write would cause the log file to be larger
-than MaxSize, the file is closed, renamed to include a timestamp of the
+than MaxLines, the file is closed, renamed to include a timestamp of the
 current time, and a new log file is created using the original log file name.
-If the length of the write is greater than MaxSize, an error is returned.
 
 
 

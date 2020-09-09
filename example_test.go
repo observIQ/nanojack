@@ -11,8 +11,8 @@ import (
 func Example() {
 	log.SetOutput(&nanojack.Logger{
 		Filename:   "/var/log/myapp/foo.log",
-		MaxSize:    500, // megabytes
+		MaxLines:   5,
 		MaxBackups: 3,
-		MaxAge:     28, // days
+		MaxNano:    100,
 	})
 }
