@@ -1,4 +1,4 @@
-package lumberjack
+package nanojack
 
 import (
 	"encoding/json"
@@ -113,7 +113,7 @@ func TestMakeLogDir(t *testing.T) {
 func TestDefaultFilename(t *testing.T) {
 	currentTime = fakeTime
 	dir := os.TempDir()
-	filename := filepath.Join(dir, filepath.Base(os.Args[0])+"-lumberjack.log")
+	filename := filepath.Join(dir, filepath.Base(os.Args[0])+"-nanojack.log")
 	defer os.Remove(filename)
 	l := &Logger{}
 	defer l.Close()

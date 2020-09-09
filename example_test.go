@@ -1,15 +1,15 @@
-package lumberjack_test
+package nanojack_test
 
 import (
 	"log"
 
-	"gopkg.in/natefinch/lumberjack.v2"
+	"github.com/observiq/nanojack"
 )
 
-// To use lumberjack with the standard library's log package, just pass it into
+// To use nanojack with the standard library's log package, just pass it into
 // the SetOutput function when your application starts.
 func Example() {
-	log.SetOutput(&lumberjack.Logger{
+	log.SetOutput(&nanojack.Logger{
 		Filename:   "/var/log/myapp/foo.log",
 		MaxSize:    500, // megabytes
 		MaxBackups: 3,

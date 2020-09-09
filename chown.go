@@ -1,6 +1,6 @@
 // +build !linux
 
-package lumberjack
+package nanojack
 
 import (
 	"os"

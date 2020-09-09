@@ -1,48 +1,34 @@
-# lumberjack  [![GoDoc](https://godoc.org/gopkg.in/natefinch/lumberjack.v2?status.png)](https://godoc.org/gopkg.in/natefinch/lumberjack.v2) [![Build Status](https://drone.io/github.com/natefinch/lumberjack/status.png)](https://drone.io/github.com/natefinch/lumberjack/latest) [![Build status](https://ci.appveyor.com/api/projects/status/00gchpxtg4gkrt5d)](https://ci.appveyor.com/project/natefinch/lumberjack) [![Coverage Status](https://coveralls.io/repos/natefinch/lumberjack/badge.svg?branch=v2.0)](https://coveralls.io/r/natefinch/lumberjack?branch=v2.0)
+This project was forked from "gopkg.in/natefinch/lumberjack"
 
-# Deprecated
+### Nanojack is a Go package for writing logs to rolling files.
 
-This package, Luberjack (effectively v1) is deprecated in favor of v2 of Lumberjack, available from gopkg.in/natefinch/lumberjack.v2 (which redirects to the v2 branch of this repo).
+Package nanojack provides a rolling logger that can be precisely controlled for testing purposes.
 
-Developerment will not continue on this branch, and it is highly recommended that you migrate to v2.
-
-### Lumberjack is a Go package for writing logs to rolling files.
-
-Package lumberjack provides a rolling logger.
-
-Note that this is v2.0 of lumberjack, and should be imported using gopkg.in
-thusly:
-
-    import "gopkg.in/natefinch/lumberjack.v2"
-
-The package name remains simply lumberjack, and the code resides at
-https://github.com/natefinch/lumberjack under the v2.0 branch.
-
-Lumberjack is intended to be one part of a logging infrastructure.
+Nanojack is intended to be one part of a logging infrastructure.
 It is not an all-in-one solution, but instead is a pluggable
 component at the bottom of the logging stack that simply controls the files
 to which logs are written.
 
-Lumberjack plays well with any logging package that can write to an
+Nanojack plays well with any logging package that can write to an
 io.Writer, including the standard library's log package.
 
-Lumberjack assumes that only one process is writing to the output files.
-Using the same lumberjack configuration from multiple processes on the same
+Nanojack assumes that only one process is writing to the output files.
+Using the same nanojack configuration from multiple processes on the same
 machine will result in improper behavior.
 
 
 **Example**
 
-To use lumberjack with the standard library's log package, just pass it into the SetOutput function when your application starts.
+To use nanojack with the standard library's log package, just pass it into the SetOutput function when your application starts.
 
 Code:
 
 ```go
-log.SetOutput(&lumberjack.Logger{
+log.SetOutput(&nanojack.Logger{
     Filename:   "/var/log/myapp/foo.log",
-    MaxSize:    500, // megabytes
+    MaxWrites:  5,
     MaxBackups: 3,
-    MaxAge:     28, //days
+    MaxNanos:   1000,
 })
 ```
 
@@ -52,7 +38,7 @@ log.SetOutput(&lumberjack.Logger{
 ``` go
 type Logger struct {
     // Filename is the file to write logs to.  Backup log files will be retained
-    // in the same directory.  It uses <processname>-lumberjack.log in
+    // in the same directory.  It uses <processname>-nanojack.log in
     // os.TempDir() if empty.
     Filename string `json:"filename" yaml:"filename"`
 
@@ -82,7 +68,7 @@ type Logger struct {
 Logger is an io.WriteCloser that writes to the specified filename.
 
 Logger opens or creates the logfile on first Write.  If the file exists and
-is less than MaxSize megabytes, lumberjack will open and append to that file.
+is less than MaxSize megabytes, nanojack will open and append to that file.
 If the file exists and its size is >= MaxSize megabytes, the file is renamed
 by putting the current time in a timestamp in the name immediately before the
 file's extension (or the end of the filename if there's no extension). A new
@@ -146,7 +132,7 @@ Example of how to rotate in response to SIGHUP.
 Code:
 
 ```go
-l := &lumberjack.Logger{}
+l := &nanojack.Logger{}
 log.SetOutput(l)
 c := make(chan os.Signal, 1)
 signal.Notify(c, syscall.SIGHUP)

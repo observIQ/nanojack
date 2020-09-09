@@ -1,6 +1,6 @@
 // +build linux
 
-package lumberjack_test
+package nanojack_test
 
 import (
 	"log"
@@ -8,12 +8,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gopkg.in/natefinch/lumberjack.v2"
+	"github.com/observiq/nanojack"
 )
 
 // Example of how to rotate in response to SIGHUP.
 func ExampleLogger_Rotate() {
-	l := &lumberjack.Logger{}
+	l := &nanojack.Logger{}
 	log.SetOutput(l)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
