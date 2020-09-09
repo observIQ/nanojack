@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v2"
 )
 
@@ -578,25 +577,6 @@ localtime: true`[1:])
 	equals(10, l.MaxNano, t)
 	equals(3, l.MaxBackups, t)
 	equals(true, l.LocalTime, t)
-}
-
-func TestToml(t *testing.T) {
-	data := `
-filename = "foo"
-maxlines = 5
-maxnano = 10
-maxbackups = 3
-localtime = true`[1:]
-
-	l := Logger{}
-	md, err := toml.Decode(data, &l)
-	isNil(err, t)
-	equals("foo", l.Filename, t)
-	equals(5, l.MaxLines, t)
-	equals(10, l.MaxNano, t)
-	equals(3, l.MaxBackups, t)
-	equals(true, l.LocalTime, t)
-	equals(0, len(md.Undecoded()), t)
 }
 
 // makeTempDir creates a file with a semi-unique name in the OS temp directory.
