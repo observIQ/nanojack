@@ -48,12 +48,6 @@ type Logger struct {
     // MaxBackups is the maximum number of old log files to retain.  The default
     // is to retain all old log files.
     MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
-
-    // LocalTime determines if the time used for formatting the timestamps in
-    // backup files is the computer's local time.  The default is to use UTC
-    // time.
-    LocalTime bool `json:"localtime" yaml:"localtime"`
-    // contains filtered or unexported fields
 }
 ```
 Logger is an io.WriteCloser that writes to the specified filename.
