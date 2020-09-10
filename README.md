@@ -28,6 +28,7 @@ log.SetOutput(&nanojack.Logger{
     Filename:   "/var/log/myapp/foo.log",
     MaxLines:  5,
     MaxBackups: 3,
+    CopyTruncate: false,
 })
 ```
 
@@ -48,6 +49,12 @@ type Logger struct {
     // MaxBackups is the maximum number of old log files to retain.  The default
     // is to retain all old log files.
     MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
+
+	// CopyTruncate defines the mechanism by which a file is backed up.
+	// By default a backup is created by renaming the old file and creating
+	// a new file in its place. If CopyTruncate is true, the old file will be
+	// copied to a new file and then truncated.
+	CopyTruncate bool `json:"copytruncate" yaml:"copytruncate"`
 }
 ```
 Logger is an io.WriteCloser that writes to the specified filename.
