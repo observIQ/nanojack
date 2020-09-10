@@ -338,71 +338,6 @@ func TestCleanupExistingBackups(t *testing.T) {
 	fileCount(dir, 2, t)
 }
 
-func TestMaxNano(t *testing.T) {
-	currentTime = fakeTime
-
-	dir := makeTempDir("TestMaxNano", t)
-	defer os.RemoveAll(dir)
-
-	filename := logFile(dir)
-	l := &Logger{
-		Filename: filename,
-		MaxLines: 1,
-		MaxNano:  1000 * 1000,
-	}
-	defer l.Close()
-	b := []byte("boo!\n")
-	n, err := l.Write(b)
-	isNil(err, t)
-	equals(len(b), n, t)
-
-	existsWithLines(filename, 1, t)
-	fileCount(dir, 1, t)
-
-	newFakeTime(time.Second)
-
-	b2 := []byte("foooooo!\n")
-	n, err = l.Write(b2)
-	isNil(err, t)
-	equals(len(b2), n, t)
-	existsWithLines(backupFile(dir), 1, t)
-
-	// we need to wait a little bit since the files get deleted on a different
-	// goroutine.
-	<-time.After(10 * time.Millisecond)
-
-	// We should still have 2 log files, since the most recent backup was just
-	// created.
-	fileCount(dir, 2, t)
-
-	existsWithLines(filename, 1, t)
-
-	// we should have deleted the old file due to being too old
-	existsWithLines(backupFile(dir), 1, t)
-
-	newFakeTime(time.Second)
-
-	b3 := []byte("foooooo!\n")
-	n, err = l.Write(b2)
-	isNil(err, t)
-	equals(len(b3), n, t)
-	existsWithLines(backupFile(dir), 1, t)
-
-	// we need to wait a little bit since the files get deleted on a different
-	// goroutine.
-	<-time.After(10 * time.Millisecond)
-
-	// We should have 2 log files - the main log file, and the most recent
-	// backup.  The earlier backup is past the cutoff and should be gone.
-	fileCount(dir, 2, t)
-
-	existsWithLines(filename, 1, t)
-
-	// we should have deleted the old file due to being too old
-	existsWithLines(backupFile(dir), 1, t)
-
-}
-
 func TestOldLogFiles(t *testing.T) {
 	currentTime = fakeTime
 
@@ -546,7 +481,6 @@ func TestJson(t *testing.T) {
 {
 	"filename": "foo",
 	"maxlines": 5,
-	"maxnano": 10,
 	"maxbackups": 3,
 	"localtime": true
 }`[1:])
@@ -556,7 +490,6 @@ func TestJson(t *testing.T) {
 	isNil(err, t)
 	equals("foo", l.Filename, t)
 	equals(5, l.MaxLines, t)
-	equals(10, l.MaxNano, t)
 	equals(3, l.MaxBackups, t)
 	equals(true, l.LocalTime, t)
 }
@@ -565,7 +498,6 @@ func TestYaml(t *testing.T) {
 	data := []byte(`
 filename: foo
 maxlines: 5
-maxnano: 10
 maxbackups: 3
 localtime: true`[1:])
 
@@ -574,7 +506,6 @@ localtime: true`[1:])
 	isNil(err, t)
 	equals("foo", l.Filename, t)
 	equals(5, l.MaxLines, t)
-	equals(10, l.MaxNano, t)
 	equals(3, l.MaxBackups, t)
 	equals(true, l.LocalTime, t)
 }

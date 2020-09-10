@@ -63,12 +63,8 @@ var _ io.WriteCloser = (*Logger)(nil)
 //
 // Whenever a new logfile gets created, old log files may be deleted.  The most
 // recent files according to the encoded timestamp will be retained, up to a
-// number equal to MaxBackups (or all of them if MaxBackups is 0).  Any files
-// with an encoded timestamp older than MaxNano nanoseconds are deleted, regardless of
-// MaxBackups.  Note that the time encoded in the timestamp is the rotation
-// time, which may differ from the last time that file was written to.
-//
-// If MaxBackups and MaxNano are both 0, no old log files will be deleted.
+// number equal to MaxBackups (or all of them if MaxBackups is 0). If MaxBackups
+// is 0, no old log files will be deleted.
 type Logger struct {
 	// Filename is the file to write logs to.  Backup log files will be retained
 	// in the same directory.  It uses <processname>-nanojack.log in
@@ -79,13 +75,8 @@ type Logger struct {
 	// It defaults to 10 lines.
 	MaxLines int `json:"maxlines" yaml:"maxlines"`
 
-	// MaxNano is the maximum duration to retain old log files based on the timestamp
-	// encoded in their filename. The default is not to remove old log files based on age.
-	MaxNano int `json:"maxnano" yaml:"maxnano"`
-
 	// MaxBackups is the maximum number of old log files to retain.  The default
-	// is to retain all old log files (though MaxNano may still cause them to get
-	// deleted.)
+	// is to retain all old log files.
 	MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
 
 	// LocalTime determines if the time used for formatting the timestamps in
@@ -271,10 +262,9 @@ func (l *Logger) filename() string {
 	return filepath.Join(os.TempDir(), name)
 }
 
-// cleanup deletes old log files, keeping at most l.MaxBackups files, as long as
-// none of them are older than MaxNano.
+// cleanup deletes old log files, keeping at most l.MaxBackups files.
 func (l *Logger) cleanup() error {
-	if l.MaxBackups == 0 && l.MaxNano == 0 {
+	if l.MaxBackups == 0 {
 		return nil
 	}
 
@@ -288,17 +278,6 @@ func (l *Logger) cleanup() error {
 	if l.MaxBackups > 0 && l.MaxBackups < len(files) {
 		deletes = files[l.MaxBackups:]
 		files = files[:l.MaxBackups]
-	}
-	if l.MaxNano > 0 {
-		diff := time.Duration(l.MaxNano) * time.Nanosecond
-
-		cutoff := currentTime().Add(-1 * diff)
-
-		for _, f := range files {
-			if f.timestamp.Before(cutoff) {
-				deletes = append(deletes, f)
-			}
-		}
 	}
 
 	if len(deletes) == 0 {

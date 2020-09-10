@@ -13,6 +13,5 @@ func Example() {
 		Filename:   "/var/log/myapp/foo.log",
 		MaxLines:   5,
 		MaxBackups: 3,
-		MaxNano:    100,
 	})
 }

@@ -28,7 +28,6 @@ log.SetOutput(&nanojack.Logger{
     Filename:   "/var/log/myapp/foo.log",
     MaxLines:  5,
     MaxBackups: 3,
-    MaxNano:     time.Millisecond,
 })
 ```
 
@@ -46,13 +45,8 @@ type Logger struct {
     // It defaults to 10 lines.
     MaxLines int `json:"maxlines" yaml:"maxlines"`
 
-    // MaxNano is the maximum time in nanoseconds to retain old log files based on the timestamp
-    // encoded in their filename. The default is not to remove old log files based on age.
-    MaxNano int `json:"maxnano" yaml:"maxnano"`
-
     // MaxBackups is the maximum number of old log files to retain.  The default
-    // is to retain all old log files (though MaxNano may still cause them to get
-    // deleted.)
+    // is to retain all old log files.
     MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
 
     // LocalTime determines if the time used for formatting the timestamps in
@@ -83,12 +77,8 @@ at 6:30pm on Nov 11 2016 would use the filename
 ### Cleaning Up Old Log Files
 Whenever a new logfile gets created, old log files may be deleted.  The most
 recent files according to the encoded timestamp will be retained, up to a
-number equal to MaxBackups (or all of them if MaxBackups is 0).  Any files
-with an encoded timestamp older than MaxNano nanoseconds are deleted, regardless of
-MaxBackups.  Note that the time encoded in the timestamp is the rotation
-time, which may differ from the last time that file was written to.
-
-If MaxBackups and MaxNano are both 0, no old log files will be deleted.
+number equal to MaxBackups (or all of them if MaxBackups is 0). If MaxBackups 
+is 0, no old log files will be deleted.
 
 
 
