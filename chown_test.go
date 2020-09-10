@@ -1,4 +1,4 @@
-// +build linux
+// +build !windows
 
 package nanojack
 
@@ -6,6 +6,7 @@ import (
 	"os"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestMaintainMode(t *testing.T) {
@@ -31,7 +32,7 @@ func TestMaintainMode(t *testing.T) {
 	isNil(err, t)
 	equals(len(b), n, t)
 
-	newFakeTime()
+	newFakeTime(time.Second)
 
 	err = l.Rotate()
 	isNil(err, t)
@@ -70,7 +71,7 @@ func TestMaintainOwner(t *testing.T) {
 	isNil(err, t)
 	equals(len(b), n, t)
 
-	newFakeTime()
+	newFakeTime(time.Second)
 
 	err = l.Rotate()
 	isNil(err, t)

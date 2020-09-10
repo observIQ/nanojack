@@ -40,13 +40,13 @@ var _ io.WriteCloser = (*Logger)(nil)
 // Logger is an io.WriteCloser that writes to the specified filename.
 //
 // Logger opens or creates the logfile on first Write.  If the file exists and
-// is less than MaxLines megabytes, nanojack will open and append to that file.
-// If the file exists and its size is >= MaxLines megabytes, the file is renamed
+// is less than MaxLines, nanojack will open and append to that file.
+// If the file exists and its size is >= MaxLines, the file is renamed
 // by putting the current time in a timestamp in the name immediately before the
 // file's extension (or the end of the filename if there's no extension). A new
 // log file is then created using original filename.
 //
-// Whenever a write would cause the current log file exceed MaxLines,
+// Whenever a write would cause the current log file to exceed MaxLines,
 // the current file is closed, renamed, and a new log file created with the
 // original name. Thus, the filename you give Logger is always the "current" log
 // file.
@@ -54,10 +54,10 @@ var _ io.WriteCloser = (*Logger)(nil)
 // Backups use the log file name given to Logger, in the form
 // `name-timestamp.ext` where name is the filename without the extension,
 // timestamp is the time at which the log was rotated formatted with the
-// time.Time format of `2006-01-02T15-04-05.000` and the extension is the
+// time.Time format of `2006-01-02T15-04-05.000000000` and the extension is the
 // original extension.  For example, if your Logger.Filename is
 // `/var/log/foo/server.log`, a backup created at 6:30pm on Nov 11 2016 would
-// use the filename `/var/log/foo/server-2016-11-04T18-30-00.000.log`
+// use the filename `/var/log/foo/server-2016-11-04T18-30-00.000000000.log`
 //
 // Cleaning Up Old Log Files
 //
@@ -78,6 +78,12 @@ type Logger struct {
 	// MaxBackups is the maximum number of old log files to retain.  The default
 	// is to retain all old log files.
 	MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
+
+	// CopyTruncate defines the mechanism by which a file is backed up.
+	// By default a backup is created by renaming the old file and creating
+	// a new file in its place. If CopyTruncate is true, the old file will be
+	// copied to a new file and then truncated.
+	CopyTruncate bool `json:"copytruncate" yaml:"copytruncate"`
 
 	lines int64
 	file  *os.File
@@ -157,50 +163,122 @@ func (l *Logger) rotate() error {
 	if err := l.openNew(); err != nil {
 		return err
 	}
+
 	return l.cleanup()
 }
 
 // openNew opens a new log file for writing, moving any old log file out of the
 // way.  This methods assumes the file has already been closed.
 func (l *Logger) openNew() error {
-	err := os.MkdirAll(l.dir(), 0744)
-	if err != nil {
+	if err := os.MkdirAll(l.dir(), 0744); err != nil {
 		return fmt.Errorf("can't make directories for new logfile: %s", err)
 	}
+	if _, err := os_Stat(l.filename()); err != nil {
+		// No previous file to backup.
+		f, err := os.OpenFile(l.filename(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0644))
+		if err != nil {
+			return fmt.Errorf("can't open new logfile: %s", err)
+		}
+		l.file = f
+		l.lines = 0
+		return nil
+	}
+	return l.backup()
+}
 
+// backup and replace the log file according to the configured mechanism.
+// This method assumes that the appropriate directory exists.
+func (l *Logger) backup() (err error) {
+	var f *os.File
+
+	if l.CopyTruncate {
+		f, err = l.copyTruncate()
+	} else {
+		f, err = l.moveCreate()
+	}
+
+	if err != nil {
+		return
+	}
+
+	l.file = f
+	l.lines = 0
+	return
+}
+
+func (l *Logger) copyTruncate() (*os.File, error) {
 	name := l.filename()
-	mode := os.FileMode(0644)
-	info, err := os_Stat(name)
-	if err == nil {
-		// Copy the mode off the old logfile.
-		mode = info.Mode()
-		// move the existing file
-		newname := backupName(name)
-		if err := os.Rename(name, newname); err != nil {
-			return fmt.Errorf("can't rename log file: %s", err)
-		}
+	bkpName := l.backupName()
 
-		// this is a no-op anywhere but linux
-		if err := chown(name, info); err != nil {
-			return err
-		}
+	info, err := os_Stat(name)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.OpenFile(name, os.O_RDWR, info.Mode())
+	if err != nil {
+		return nil, err
+	}
+
+	bkp, err := os.OpenFile(bkpName, os.O_CREATE|os.O_RDWR, info.Mode())
+	if err != nil {
+		return nil, err
+	}
+	defer bkp.Close()
+
+	// this is a no-op on windows
+	if err := chown(bkpName, info); err != nil {
+		return nil, err
+	}
+
+	if _, err := io.Copy(bkp, f); err != nil {
+		return nil, err
+	}
+	bkp.Sync()
+
+	if err := f.Truncate(0); err != nil {
+		return nil, err
+	} else if _, err = f.Seek(0, 0); err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func (l *Logger) moveCreate() (*os.File, error) {
+	name := l.filename()
+	bkpName := l.backupName()
+
+	info, err := os_Stat(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// move the existing file
+	if err := os.Rename(name, bkpName); err != nil {
+		return nil, fmt.Errorf("can't rename log file: %s", err)
 	}
 
 	// we use truncate here because this should only get called when we've moved
 	// the file ourselves. if someone else creates the file in the meantime,
 	// just wipe out the contents.
-	f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 	if err != nil {
-		return fmt.Errorf("can't open new logfile: %s", err)
+		return nil, fmt.Errorf("can't open new logfile: %s", err)
 	}
-	l.file = f
-	l.lines = 0
-	return nil
+
+	// this is a no-op on windows
+	if err := chown(name, info); err != nil {
+		return nil, err
+	}
+
+	return f, nil
 }
 
 // backupName creates a new filename from the given name, inserting a UTC
 // timestamp between the filename and the extension.
-func backupName(name string) string {
+func (l *Logger) backupName() string {
+	name := l.filename()
 	dir := filepath.Dir(name)
 	filename := filepath.Base(name)
 	ext := filepath.Ext(filename)

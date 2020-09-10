@@ -393,17 +393,76 @@ func TestTimeFromName(t *testing.T) {
 	equals("", val, t)
 }
 
-func TestRotate(t *testing.T) {
+func TestRotateWithMoveCreate(t *testing.T) {
 	currentTime = fakeTime
-	dir := makeTempDir("TestRotate", t)
+	dir := makeTempDir("TestRotateWithMoveCreate", t)
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
 
 	l := &Logger{
-		Filename:   filename,
-		MaxBackups: 1,
-		MaxLines:   10,
+		Filename:     filename,
+		MaxBackups:   1,
+		MaxLines:     10,
+		CopyTruncate: false,
+	}
+	defer l.Close()
+	b := []byte("boo!\n")
+	n, err := l.Write(b)
+	isNil(err, t)
+	equals(len(b), n, t)
+
+	existsWithLines(filename, 1, t)
+	fileCount(dir, 1, t)
+
+	newFakeTime(time.Second)
+
+	err = l.Rotate()
+	isNil(err, t)
+
+	// we need to wait a little bit since the files get deleted on a different
+	// goroutine.
+	<-time.After(10 * time.Millisecond)
+
+	filename2 := backupFile(dir)
+	existsWithLines(filename2, 1, t)
+	existsWithLines(filename, 0, t)
+	fileCount(dir, 2, t)
+	newFakeTime(time.Second)
+
+	err = l.Rotate()
+	isNil(err, t)
+
+	// we need to wait a little bit since the files get deleted on a different
+	// goroutine.
+	<-time.After(10 * time.Millisecond)
+
+	filename3 := backupFile(dir)
+	existsWithLines(filename3, 0, t)
+	existsWithLines(filename, 0, t)
+	fileCount(dir, 2, t)
+
+	b2 := []byte("foooooo!\n")
+	n, err = l.Write(b2)
+	isNil(err, t)
+	equals(len(b2), n, t)
+
+	// this will use the new fake time
+	existsWithLines(filename, 1, t)
+}
+
+func TestRotateWithCopyTruncate(t *testing.T) {
+	currentTime = fakeTime
+	dir := makeTempDir("TestRotateWithCopyTruncate", t)
+	defer os.RemoveAll(dir)
+
+	filename := logFile(dir)
+
+	l := &Logger{
+		Filename:     filename,
+		MaxBackups:   1,
+		MaxLines:     10,
+		CopyTruncate: true,
 	}
 	defer l.Close()
 	b := []byte("boo!\n")
@@ -455,7 +514,8 @@ func TestJson(t *testing.T) {
 {
 	"filename": "foo",
 	"maxlines": 5,
-	"maxbackups": 3
+	"maxbackups": 3,
+	"copytruncate": false
 }`[1:])
 
 	l := Logger{}
@@ -470,7 +530,8 @@ func TestYaml(t *testing.T) {
 	data := []byte(`
 filename: foo
 maxlines: 5
-maxbackups: 3`[1:])
+maxbackups: 3
+copytruncate: false`[1:])
 
 	l := Logger{}
 	err := yaml.Unmarshal(data, &l)

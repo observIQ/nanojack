@@ -55,7 +55,7 @@ Logger is an io.WriteCloser that writes to the specified filename.
 Logger opens or creates the logfile on first Write.  If the file exists, 
 nanojack will rotate that file and open a new one.
 
-Whenever a write would cause the current log file exceed MaxLines megabytes,
+Whenever a write would cause the current log file exceed MaxLines,
 the current file is closed, renamed, and a new log file created with the
 original name. Thus, the filename you give Logger is always the "current" log
 file.
@@ -63,10 +63,10 @@ file.
 Backups use the log file name given to Logger, in the form `name-timestamp.ext`
 where name is the filename without the extension, timestamp is the time at which
 the log was rotated formatted with the time.Time format of
-`2006-01-02T15-04-05.000` and the extension is the original extension.  For
+`2006-01-02T15-04-05.000000000` and the extension is the original extension.  For
 example, if your Logger.Filename is `/var/log/foo/server.log`, a backup created
 at 6:30pm on Nov 11 2016 would use the filename
-`/var/log/foo/server-2016-11-04T18-30-00.000.log`
+`/var/log/foo/server-2016-11-04T18-30-00.000000000.log`
 
 ### Cleaning Up Old Log Files
 Whenever a new logfile gets created, old log files may be deleted.  The most
