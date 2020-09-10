@@ -79,11 +79,6 @@ type Logger struct {
 	// is to retain all old log files.
 	MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
 
-	// LocalTime determines if the time used for formatting the timestamps in
-	// backup files is the computer's local time.  The default is to use UTC
-	// time.
-	LocalTime bool `json:"localtime" yaml:"localtime"`
-
 	lines int64
 	file  *os.File
 	mu    sync.Mutex
@@ -180,7 +175,7 @@ func (l *Logger) openNew() error {
 		// Copy the mode off the old logfile.
 		mode = info.Mode()
 		// move the existing file
-		newname := backupName(name, l.LocalTime)
+		newname := backupName(name)
 		if err := os.Rename(name, newname); err != nil {
 			return fmt.Errorf("can't rename log file: %s", err)
 		}
@@ -203,18 +198,14 @@ func (l *Logger) openNew() error {
 	return nil
 }
 
-// backupName creates a new filename from the given name, inserting a timestamp
-// between the filename and the extension, using the local time if requested
-// (otherwise UTC).
-func backupName(name string, local bool) string {
+// backupName creates a new filename from the given name, inserting a UTC
+// timestamp between the filename and the extension.
+func backupName(name string) string {
 	dir := filepath.Dir(name)
 	filename := filepath.Base(name)
 	ext := filepath.Ext(filename)
 	prefix := filename[:len(filename)-len(ext)]
-	t := currentTime()
-	if !local {
-		t = t.UTC()
-	}
+	t := currentTime().UTC()
 
 	timestamp := t.Format(backupTimeFormat)
 	return filepath.Join(dir, fmt.Sprintf("%s-%s%s", prefix, timestamp, ext))

@@ -393,32 +393,6 @@ func TestTimeFromName(t *testing.T) {
 	equals("", val, t)
 }
 
-func TestLocalTime(t *testing.T) {
-	currentTime = fakeTime
-
-	dir := makeTempDir("TestLocalTime", t)
-	defer os.RemoveAll(dir)
-
-	l := &Logger{
-		Filename:  logFile(dir),
-		MaxLines:  1,
-		LocalTime: true,
-	}
-	defer l.Close()
-	b := []byte("boo!\n")
-	n, err := l.Write(b)
-	isNil(err, t)
-	equals(len(b), n, t)
-
-	b2 := []byte("fooooooo!\n")
-	n2, err := l.Write(b2)
-	isNil(err, t)
-	equals(len(b2), n2, t)
-
-	existsWithLines(logFile(dir), 1, t)
-	existsWithLines(backupFileLocal(dir), 1, t)
-}
-
 func TestRotate(t *testing.T) {
 	currentTime = fakeTime
 	dir := makeTempDir("TestRotate", t)
@@ -481,8 +455,7 @@ func TestJson(t *testing.T) {
 {
 	"filename": "foo",
 	"maxlines": 5,
-	"maxbackups": 3,
-	"localtime": true
+	"maxbackups": 3
 }`[1:])
 
 	l := Logger{}
@@ -491,15 +464,13 @@ func TestJson(t *testing.T) {
 	equals("foo", l.Filename, t)
 	equals(5, l.MaxLines, t)
 	equals(3, l.MaxBackups, t)
-	equals(true, l.LocalTime, t)
 }
 
 func TestYaml(t *testing.T) {
 	data := []byte(`
 filename: foo
 maxlines: 5
-maxbackups: 3
-localtime: true`[1:])
+maxbackups: 3`[1:])
 
 	l := Logger{}
 	err := yaml.Unmarshal(data, &l)
@@ -507,7 +478,6 @@ localtime: true`[1:])
 	equals("foo", l.Filename, t)
 	equals(5, l.MaxLines, t)
 	equals(3, l.MaxBackups, t)
-	equals(true, l.LocalTime, t)
 }
 
 // makeTempDir creates a file with a semi-unique name in the OS temp directory.
