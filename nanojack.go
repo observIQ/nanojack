@@ -234,7 +234,6 @@ func (l *Logger) copyTruncate() (*os.File, error) {
 	if _, err := io.Copy(bkp, f); err != nil {
 		return nil, err
 	}
-	bkp.Sync()
 
 	if err := f.Truncate(0); err != nil {
 		return nil, err
