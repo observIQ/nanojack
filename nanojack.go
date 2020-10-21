@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -84,6 +85,11 @@ type Logger struct {
 	// a new file in its place. If CopyTruncate is true, the old file will be
 	// copied to a new file and then truncated.
 	CopyTruncate bool `json:"copytruncate" yaml:"copytruncate"`
+
+	// SequentialExtension defines whether backups are renamed by
+	// timestamp (example-2020-10-20T15-04-05.000000000.log) or
+	// by simple integer (example.log.1)
+	SequentialExtension bool `json:"integerextension" yaml:"integerextension"`
 
 	lines int64
 	file  *os.File
@@ -152,38 +158,53 @@ func (l *Logger) Rotate() error {
 	return l.rotate()
 }
 
-// rotate closes the current file, moves it aside with a timestamp in the name,
-// (if it exists), opens a new file with the original filename, and then runs
-// cleanup.
+// rotate closes the current file, moves it aside with an appropriate extension
+//  in the name, (if it exists), opens a new file with the original filename,
+// and then runs cleanup.
 func (l *Logger) rotate() error {
 	if err := l.close(); err != nil {
 		return err
 	}
 
-	if err := l.openNew(); err != nil {
+	if l.fileExists() {
+		if err := l.backup(); err != nil {
+			return err
+		}
+	} else if err := l.initializeFile(); err != nil {
 		return err
 	}
 
+	if l.SequentialExtension {
+		// sequential extention should never create files beyond the max
+		return nil
+	}
+
+	// cleanup old timestamped files
 	return l.cleanup()
 }
 
-// openNew opens a new log file for writing, moving any old log file out of the
-// way.  This methods assumes the file has already been closed.
-func (l *Logger) openNew() error {
+// fileExists returns true if the logger's primary file already exists
+func (l *Logger) fileExists() bool {
+	return fileExists(l.filename())
+}
+
+func fileExists(path string) bool {
+	_, err := os_Stat(path)
+	return err == nil
+}
+
+// initializeFile tries to create the logger's primary file
+func (l *Logger) initializeFile() error {
 	if err := os.MkdirAll(l.dir(), 0744); err != nil {
 		return fmt.Errorf("can't make directories for new logfile: %s", err)
 	}
-	if _, err := os_Stat(l.filename()); err != nil {
-		// No previous file to backup.
-		f, err := os.OpenFile(l.filename(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0644))
-		if err != nil {
-			return fmt.Errorf("can't open new logfile: %s", err)
-		}
-		l.file = f
-		l.lines = 0
-		return nil
+	f, err := os.OpenFile(l.filename(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0644))
+	if err != nil {
+		return fmt.Errorf("can't open new logfile: %s", err)
 	}
-	return l.backup()
+	l.file = f
+	l.lines = 0
+	return nil
 }
 
 // backup and replace the log file according to the configured mechanism.
@@ -191,10 +212,10 @@ func (l *Logger) openNew() error {
 func (l *Logger) backup() (err error) {
 	var f *os.File
 
-	if l.CopyTruncate {
-		f, err = l.copyTruncate()
+	if l.SequentialExtension {
+		f, err = l.backupSequential()
 	} else {
-		f, err = l.moveCreate()
+		f, err = doMove(l.filename(), l.timestampedBackupName(), l.CopyTruncate)
 	}
 
 	if err != nil {
@@ -206,28 +227,60 @@ func (l *Logger) backup() (err error) {
 	return
 }
 
-func (l *Logger) copyTruncate() (*os.File, error) {
+func (l *Logger) backupSequential() (*os.File, error) {
 	name := l.filename()
-	bkpName := l.backupName()
 
-	info, err := os_Stat(name)
+	maxBackupName := fmt.Sprintf("%s.%d", name, l.MaxBackups)
+
+	if fileExists(maxBackupName) {
+		// what am I going to do, log this?
+		_ = os.Remove(maxBackupName)
+	}
+
+	// rotate any remaining backups, but not the primary yet
+	for i := l.MaxBackups - 1; i > 0; i-- {
+		from := fmt.Sprintf("%s.%d", name, i)
+		to := fmt.Sprintf("%s.%d", name, i+1)
+
+		if !fileExists(from) {
+			continue
+		}
+
+		if _, err := move(from, to); err != nil {
+			return nil, err
+		}
+	}
+
+	return doMove(l.filename(), fmt.Sprintf("%s.%d", name, 1), l.CopyTruncate)
+}
+
+func doMove(from, to string, copyTrunc bool) (*os.File, error) {
+	if copyTrunc {
+		return copyTruncate(from, to)
+	}
+	return moveCreate(from, to)
+}
+
+func copyTruncate(from, to string) (*os.File, error) {
+
+	info, err := os_Stat(from)
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := os.OpenFile(name, os.O_RDWR, info.Mode())
+	f, err := os.OpenFile(from, os.O_RDWR, info.Mode())
 	if err != nil {
 		return nil, err
 	}
 
-	bkp, err := os.OpenFile(bkpName, os.O_CREATE|os.O_RDWR, info.Mode())
+	bkp, err := os.OpenFile(to, os.O_CREATE|os.O_RDWR, info.Mode())
 	if err != nil {
 		return nil, err
 	}
 	defer bkp.Close()
 
 	// this is a no-op on windows
-	if err := chown(bkpName, info); err != nil {
+	if err := chown(to, info); err != nil {
 		return nil, err
 	}
 
@@ -244,46 +297,53 @@ func (l *Logger) copyTruncate() (*os.File, error) {
 	return f, nil
 }
 
-func (l *Logger) moveCreate() (*os.File, error) {
-	name := l.filename()
-	bkpName := l.backupName()
+func move(from, to string) (os.FileInfo, error) {
 
-	info, err := os_Stat(name)
+	info, err := os_Stat(from)
 	if err != nil {
-		return nil, err
+		return info, err
 	}
 
 	// move the existing file
-	if err := os.Rename(name, bkpName); err != nil {
-		return nil, fmt.Errorf("can't rename log file: %s", err)
+	if err := os.Rename(from, to); err != nil {
+		return info, fmt.Errorf("can't rename log file: %s", err)
+	}
+
+	return info, nil
+}
+
+func moveCreate(from, to string) (*os.File, error) {
+
+	info, err := move(from, to)
+	if err != nil {
+		return nil, err
 	}
 
 	// we use truncate here because this should only get called when we've moved
 	// the file ourselves. if someone else creates the file in the meantime,
 	// just wipe out the contents.
-	f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	f, err := os.OpenFile(from, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 	if err != nil {
 		return nil, fmt.Errorf("can't open new logfile: %s", err)
 	}
 
 	// this is a no-op on windows
-	if err := chown(name, info); err != nil {
+	if err := chown(from, info); err != nil {
 		return nil, err
 	}
 
 	return f, nil
 }
 
-// backupName creates a new filename from the given name, inserting a UTC
+// timestampedBackupName creates a new filename from the given name, inserting a UTC
 // timestamp between the filename and the extension.
-func (l *Logger) backupName() string {
+func (l *Logger) timestampedBackupName() string {
 	name := l.filename()
 	dir := filepath.Dir(name)
 	filename := filepath.Base(name)
 	ext := filepath.Ext(filename)
 	prefix := filename[:len(filename)-len(ext)]
 	t := currentTime().UTC()
-
 	timestamp := t.Format(backupTimeFormat)
 	return filepath.Join(dir, fmt.Sprintf("%s-%s%s", prefix, timestamp, ext))
 }
@@ -295,7 +355,7 @@ func (l *Logger) openExistingOrNew() error {
 	filename := l.filename()
 	info, err := os_Stat(filename)
 	if os.IsNotExist(err) {
-		return l.openNew()
+		return l.initializeFile()
 	}
 	if err != nil {
 		return fmt.Errorf("error getting log file info: %s", err)
@@ -309,19 +369,19 @@ func (l *Logger) openExistingOrNew() error {
 	if err != nil {
 		// if we fail to open the old log file for some reason, just ignore
 		// it and open a new log file.
-		return l.openNew()
+		return l.initializeFile()
 	}
 	l.file = file
 	l.lines, err = linesInFile(l.filename())
 	if err != nil {
 		// if we fail to count the lines in the old log file for some reason,
 		// just ignore it and open a new log file.
-		return l.openNew()
+		return l.initializeFile()
 	}
 	return nil
 }
 
-// genFilename generates the name of the logfile from the current time.
+// filename generates the name of the logfile from the current time.
 func (l *Logger) filename() string {
 	if l.Filename != "" {
 		return l.Filename
@@ -381,6 +441,11 @@ func (l *Logger) oldLogFiles() ([]logInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't read log file directory: %s", err)
 	}
+
+	if l.SequentialExtension {
+
+	}
+
 	logFiles := []logInfo{}
 
 	prefix, ext := l.prefixAndExt()
@@ -422,7 +487,19 @@ func (l *Logger) timeFromName(filename, prefix, ext string) string {
 	return filename
 }
 
-// max returns the maximum size in bytes of log files before rolling.
+// intFromName extracts the sequence number from the filename by stripping off
+// the filename's base.
+func (l *Logger) intFromName(name string) int {
+
+	ext := name[len(fmt.Sprintf("%s.", l.Filename)):]
+	i, err := strconv.ParseInt(ext, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return int(i)
+}
+
+// max returns the maximum lines per log file before rolling.
 func (l *Logger) max() int64 {
 	if l.MaxLines == 0 {
 		return int64(defaultMaxLines)
