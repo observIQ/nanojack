@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaintainMode(t *testing.T) {
@@ -25,7 +27,7 @@ func testMaintainMode(t *testing.T, copyTruncate bool) func(t *testing.T) {
 
 		mode := os.FileMode(0600)
 		f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
-		isNil(err, t)
+		require.NoError(t, err)
 		f.Close()
 
 		l := &Logger{
@@ -37,21 +39,21 @@ func testMaintainMode(t *testing.T, copyTruncate bool) func(t *testing.T) {
 		defer l.Close()
 		b := []byte("boo!")
 		n, err := l.Write(b)
-		isNil(err, t)
-		equals(len(b), n, t)
+		require.NoError(t, err)
+		require.Equal(t, len(b), n)
 
 		newFakeTime(time.Second)
 
 		err = l.Rotate()
-		isNil(err, t)
+		require.NoError(t, err)
 
 		filename2 := backupFile(dir)
 		info, err := os.Stat(filename)
-		isNil(err, t)
+		require.NoError(t, err)
 		info2, err := os.Stat(filename2)
-		isNil(err, t)
-		equals(mode, info.Mode(), t)
-		equals(mode, info2.Mode(), t)
+		require.NoError(t, err)
+		require.Equal(t, mode, info.Mode())
+		require.Equal(t, mode, info2.Mode())
 	}
 }
 
@@ -84,16 +86,16 @@ func testMaintainOwner(t *testing.T, copyTruncate bool) func(t *testing.T) {
 		defer l.Close()
 		b := []byte("boo!")
 		n, err := l.Write(b)
-		isNil(err, t)
-		equals(len(b), n, t)
+		require.NoError(t, err)
+		require.Equal(t, len(b), n)
 
 		newFakeTime(time.Second)
 
 		err = l.Rotate()
-		isNil(err, t)
+		require.NoError(t, err)
 
-		equals(555, fakeC.uid, t)
-		equals(666, fakeC.gid, t)
+		require.Equal(t, 555, fakeC.uid)
+		require.Equal(t, 666, fakeC.gid)
 	}
 }
 

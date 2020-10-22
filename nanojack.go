@@ -86,10 +86,10 @@ type Logger struct {
 	// copied to a new file and then truncated.
 	CopyTruncate bool `json:"copytruncate" yaml:"copytruncate"`
 
-	// SequentialExtension defines whether backups are renamed by
+	// Sequential defines whether backups are renamed by
 	// timestamp (example-2020-10-20T15-04-05.000000000.log) or
 	// by simple integer (example.log.1)
-	SequentialExtension bool `json:"integerextension" yaml:"integerextension"`
+	Sequential bool `json:"sequential" yaml:"sequential"`
 
 	lines int64
 	file  *os.File
@@ -174,7 +174,7 @@ func (l *Logger) rotate() error {
 		return err
 	}
 
-	if l.SequentialExtension {
+	if l.Sequential {
 		// sequential extention should never create files beyond the max
 		return nil
 	}
@@ -212,7 +212,7 @@ func (l *Logger) initializeFile() error {
 func (l *Logger) backup() (err error) {
 	var f *os.File
 
-	if l.SequentialExtension {
+	if l.Sequential {
 		f, err = l.backupSequential()
 	} else {
 		f, err = doMove(l.filename(), l.timestampedBackupName(), l.CopyTruncate)
@@ -442,7 +442,7 @@ func (l *Logger) oldLogFiles() ([]logInfo, error) {
 		return nil, fmt.Errorf("can't read log file directory: %s", err)
 	}
 
-	if l.SequentialExtension {
+	if l.Sequential {
 
 	}
 
