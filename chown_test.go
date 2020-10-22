@@ -44,8 +44,7 @@ func testMaintainMode(t *testing.T, copyTruncate bool) func(t *testing.T) {
 
 		newFakeTime(time.Second)
 
-		err = l.Rotate()
-		require.NoError(t, err)
+		require.NoError(t, l.Rotate())
 
 		filename2 := backupFile(dir)
 		info, err := os.Stat(filename)
@@ -91,8 +90,7 @@ func testMaintainOwner(t *testing.T, copyTruncate bool) func(t *testing.T) {
 
 		newFakeTime(time.Second)
 
-		err = l.Rotate()
-		require.NoError(t, err)
+		require.NoError(t, l.Rotate())
 
 		require.Equal(t, 555, fakeC.uid)
 		require.Equal(t, 666, fakeC.gid)

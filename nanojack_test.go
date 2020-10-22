@@ -53,8 +53,7 @@ func TestAppendExisting(t *testing.T) {
 
 	filename := logFile(dir)
 	data := []byte("foo!\n")
-	err := ioutil.WriteFile(filename, data, 0644)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(filename, data, 0644))
 	existsWithLines(filename, 1, t)
 
 	l := &Logger{
@@ -156,8 +155,7 @@ func TestFirstWriteRotate(t *testing.T) {
 	defer l.Close()
 
 	start := []byte("boooooo!\n")
-	err := ioutil.WriteFile(filename, start, 0600)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(filename, start, 0600))
 
 	newFakeTime(time.Second)
 
@@ -243,14 +241,12 @@ func TestMaxBackups(t *testing.T) {
 	// create a file that is close to but different from the logfile name.
 	// It shouldn't get caught by our deletion filters.
 	notlogfile := logFile(dir) + ".foo"
-	err = ioutil.WriteFile(notlogfile, []byte("data\n"), 0644)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(notlogfile, []byte("data\n"), 0644))
 
 	// Make a directory that exactly matches our log file filters... it still
 	// shouldn't get caught by the deletion filter since it's a directory.
 	notlogfiledir := backupFile(dir)
-	err = os.Mkdir(notlogfiledir, 0700)
-	require.NoError(t, err)
+	require.NoError(t, os.Mkdir(notlogfiledir, 0700))
 
 	newFakeTime(time.Second)
 
@@ -299,25 +295,21 @@ func TestCleanupExistingBackups(t *testing.T) {
 
 	data := []byte("data\n")
 	backup := backupFile(dir)
-	err := ioutil.WriteFile(backup, data, 0644)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(backup, data, 0644))
 
 	newFakeTime(time.Second)
 
 	backup = backupFile(dir)
-	err = ioutil.WriteFile(backup, data, 0644)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(backup, data, 0644))
 
 	newFakeTime(time.Second)
 
 	backup = backupFile(dir)
-	err = ioutil.WriteFile(backup, data, 0644)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(backup, data, 0644))
 
 	// now create a primary log file with some data
 	filename := logFile(dir)
-	err = ioutil.WriteFile(filename, data, 0644)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(filename, data, 0644))
 
 	l := &Logger{
 		Filename:   filename,
@@ -349,8 +341,7 @@ func TestOldLogFiles(t *testing.T) {
 
 	filename := logFile(dir)
 	data := []byte("data\n")
-	err := ioutil.WriteFile(filename, data, 07)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(filename, data, 07))
 
 	// This gives us a time with the same precision as the time we get from the
 	// timestamp in the name.
@@ -358,8 +349,7 @@ func TestOldLogFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	backup := backupFile(dir)
-	err = ioutil.WriteFile(backup, data, 07)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(backup, data, 07))
 
 	newFakeTime(time.Second)
 
@@ -367,8 +357,7 @@ func TestOldLogFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	backup2 := backupFile(dir)
-	err = ioutil.WriteFile(backup2, data, 07)
-	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile(backup2, data, 07))
 
 	l := &Logger{Filename: filename}
 	files, err := l.oldLogFiles()
@@ -426,8 +415,7 @@ func testRotate(t *testing.T, copyTruncate bool) func(t *testing.T) {
 
 		newFakeTime(time.Second)
 
-		err = l.Rotate()
-		require.NoError(t, err)
+		require.NoError(t, l.Rotate())
 
 		// we need to wait a little bit since the files get deleted on a different
 		// goroutine.
@@ -439,8 +427,7 @@ func testRotate(t *testing.T, copyTruncate bool) func(t *testing.T) {
 		fileCount(dir, 2, t)
 		newFakeTime(time.Second)
 
-		err = l.Rotate()
-		require.NoError(t, err)
+		require.NoError(t, l.Rotate())
 
 		// we need to wait a little bit since the files get deleted on a different
 		// goroutine.
