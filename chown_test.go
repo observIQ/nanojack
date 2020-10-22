@@ -10,74 +10,91 @@ import (
 )
 
 func TestMaintainMode(t *testing.T) {
-	currentTime = fakeTime
-	dir := makeTempDir("TestMaintainMode", t)
-	defer os.RemoveAll(dir)
+	t.Run("MoveCreate", testMaintainMode(t, false))
+	t.Run("CopyTruncate", testMaintainMode(t, true))
+}
 
-	filename := logFile(dir)
+func testMaintainMode(t *testing.T, copyTruncate bool) func(t *testing.T) {
+	return func(t *testing.T) {
 
-	mode := os.FileMode(0600)
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
-	isNil(err, t)
-	f.Close()
+		currentTime = fakeTime
+		dir := makeTempDir("TestMaintainMode", t)
+		defer os.RemoveAll(dir)
 
-	l := &Logger{
-		Filename:   filename,
-		MaxBackups: 1,
-		MaxLines:   10,
+		filename := logFile(dir)
+
+		mode := os.FileMode(0600)
+		f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
+		isNil(err, t)
+		f.Close()
+
+		l := &Logger{
+			Filename:     filename,
+			MaxBackups:   1,
+			MaxLines:     10,
+			CopyTruncate: copyTruncate,
+		}
+		defer l.Close()
+		b := []byte("boo!")
+		n, err := l.Write(b)
+		isNil(err, t)
+		equals(len(b), n, t)
+
+		newFakeTime(time.Second)
+
+		err = l.Rotate()
+		isNil(err, t)
+
+		filename2 := backupFile(dir)
+		info, err := os.Stat(filename)
+		isNil(err, t)
+		info2, err := os.Stat(filename2)
+		isNil(err, t)
+		equals(mode, info.Mode(), t)
+		equals(mode, info2.Mode(), t)
 	}
-	defer l.Close()
-	b := []byte("boo!")
-	n, err := l.Write(b)
-	isNil(err, t)
-	equals(len(b), n, t)
-
-	newFakeTime(time.Second)
-
-	err = l.Rotate()
-	isNil(err, t)
-
-	filename2 := backupFile(dir)
-	info, err := os.Stat(filename)
-	isNil(err, t)
-	info2, err := os.Stat(filename2)
-	isNil(err, t)
-	equals(mode, info.Mode(), t)
-	equals(mode, info2.Mode(), t)
 }
 
 func TestMaintainOwner(t *testing.T) {
-	fakeC := fakeChown{}
-	os_Chown = fakeC.Set
-	os_Stat = fakeStat
-	defer func() {
-		os_Chown = os.Chown
-		os_Stat = os.Stat
-	}()
-	currentTime = fakeTime
-	dir := makeTempDir("TestMaintainOwner", t)
-	defer os.RemoveAll(dir)
+	t.Run("MoveCreate", testMaintainMode(t, false))
+	t.Run("CopyTruncate", testMaintainMode(t, true))
+}
 
-	filename := logFile(dir)
+func testMaintainOwner(t *testing.T, copyTruncate bool) func(t *testing.T) {
+	return func(t *testing.T) {
+		fakeC := fakeChown{}
+		os_Chown = fakeC.Set
+		os_Stat = fakeStat
+		defer func() {
+			os_Chown = os.Chown
+			os_Stat = os.Stat
+		}()
+		currentTime = fakeTime
+		dir := makeTempDir("TestMaintainOwner", t)
+		defer os.RemoveAll(dir)
 
-	l := &Logger{
-		Filename:   filename,
-		MaxBackups: 1,
-		MaxLines:   10,
+		filename := logFile(dir)
+
+		l := &Logger{
+			Filename:     filename,
+			MaxBackups:   1,
+			MaxLines:     10,
+			CopyTruncate: false,
+		}
+		defer l.Close()
+		b := []byte("boo!")
+		n, err := l.Write(b)
+		isNil(err, t)
+		equals(len(b), n, t)
+
+		newFakeTime(time.Second)
+
+		err = l.Rotate()
+		isNil(err, t)
+
+		equals(555, fakeC.uid, t)
+		equals(666, fakeC.gid, t)
 	}
-	defer l.Close()
-	b := []byte("boo!")
-	n, err := l.Write(b)
-	isNil(err, t)
-	equals(len(b), n, t)
-
-	newFakeTime(time.Second)
-
-	err = l.Rotate()
-	isNil(err, t)
-
-	equals(555, fakeC.uid, t)
-	equals(666, fakeC.gid, t)
 }
 
 type fakeChown struct {
