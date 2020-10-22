@@ -18,7 +18,7 @@ func testMaintainMode(t *testing.T, copyTruncate bool) func(t *testing.T) {
 	return func(t *testing.T) {
 
 		currentTime = fakeTime
-		dir := makeTempDir("TestMaintainMode", t)
+		dir := makeTempDir(t)
 		defer os.RemoveAll(dir)
 
 		filename := logFile(dir)
@@ -70,7 +70,7 @@ func testMaintainOwner(t *testing.T, copyTruncate bool) func(t *testing.T) {
 			os_Stat = os.Stat
 		}()
 		currentTime = fakeTime
-		dir := makeTempDir("TestMaintainOwner", t)
+		dir := makeTempDir(t)
 		defer os.RemoveAll(dir)
 
 		filename := logFile(dir)

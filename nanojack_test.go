@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func fakeTime() time.Time {
 func TestNewFile(t *testing.T) {
 	currentTime = fakeTime
 
-	dir := makeTempDir("TestNewFile", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 	l := &Logger{
 		Filename: logFile(dir),
@@ -45,7 +46,7 @@ func TestNewFile(t *testing.T) {
 
 func TestAppendExisting(t *testing.T) {
 	currentTime = fakeTime
-	dir := makeTempDir("TestAppendExisting", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
@@ -106,7 +107,7 @@ func TestDefaultFilename(t *testing.T) {
 func TestAutoRotate(t *testing.T) {
 	currentTime = fakeTime
 
-	dir := makeTempDir("TestAutoRotate", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
@@ -142,7 +143,7 @@ func TestAutoRotate(t *testing.T) {
 
 func TestFirstWriteRotate(t *testing.T) {
 	currentTime = fakeTime
-	dir := makeTempDir("TestFirstWriteRotate", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
@@ -172,7 +173,7 @@ func TestFirstWriteRotate(t *testing.T) {
 
 func TestMaxBackups(t *testing.T) {
 	currentTime = fakeTime
-	dir := makeTempDir("TestMaxBackups", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
@@ -289,7 +290,7 @@ func TestCleanupExistingBackups(t *testing.T) {
 
 	currentTime = fakeTime
 
-	dir := makeTempDir("TestCleanupExistingBackups", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 
 	// make 3 backup files
@@ -341,7 +342,7 @@ func TestCleanupExistingBackups(t *testing.T) {
 func TestOldLogFiles(t *testing.T) {
 	currentTime = fakeTime
 
-	dir := makeTempDir("TestOldLogFiles", t)
+	dir := makeTempDir(t)
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
@@ -393,120 +394,69 @@ func TestTimeFromName(t *testing.T) {
 	equals("", val, t)
 }
 
-func TestRotateWithMoveCreate(t *testing.T) {
-	currentTime = fakeTime
-	dir := makeTempDir("TestRotateWithMoveCreate", t)
-	defer os.RemoveAll(dir)
-
-	filename := logFile(dir)
-
-	l := &Logger{
-		Filename:     filename,
-		MaxBackups:   1,
-		MaxLines:     10,
-		CopyTruncate: false,
-	}
-	defer l.Close()
-	b := []byte("boo!\n")
-	n, err := l.Write(b)
-	isNil(err, t)
-	equals(len(b), n, t)
-
-	existsWithLines(filename, 1, t)
-	fileCount(dir, 1, t)
-
-	newFakeTime(time.Second)
-
-	err = l.Rotate()
-	isNil(err, t)
-
-	// we need to wait a little bit since the files get deleted on a different
-	// goroutine.
-	<-time.After(10 * time.Millisecond)
-
-	filename2 := backupFile(dir)
-	existsWithLines(filename2, 1, t)
-	existsWithLines(filename, 0, t)
-	fileCount(dir, 2, t)
-	newFakeTime(time.Second)
-
-	err = l.Rotate()
-	isNil(err, t)
-
-	// we need to wait a little bit since the files get deleted on a different
-	// goroutine.
-	<-time.After(10 * time.Millisecond)
-
-	filename3 := backupFile(dir)
-	existsWithLines(filename3, 0, t)
-	existsWithLines(filename, 0, t)
-	fileCount(dir, 2, t)
-
-	b2 := []byte("foooooo!\n")
-	n, err = l.Write(b2)
-	isNil(err, t)
-	equals(len(b2), n, t)
-
-	// this will use the new fake time
-	existsWithLines(filename, 1, t)
+func TestRotate(t *testing.T) {
+	t.Run("MoveCreate", testRotate(t, false))
+	t.Run("CopyTruncate", testRotate(t, true))
 }
 
-func TestRotateWithCopyTruncate(t *testing.T) {
-	currentTime = fakeTime
-	dir := makeTempDir("TestRotateWithCopyTruncate", t)
-	defer os.RemoveAll(dir)
+func testRotate(t *testing.T, copyTruncate bool) func(t *testing.T) {
+	return func(t *testing.T) {
+		currentTime = fakeTime
+		dir := makeTempDir(t)
+		defer os.RemoveAll(dir)
 
-	filename := logFile(dir)
+		filename := logFile(dir)
 
-	l := &Logger{
-		Filename:     filename,
-		MaxBackups:   1,
-		MaxLines:     10,
-		CopyTruncate: true,
+		l := &Logger{
+			Filename:     filename,
+			MaxBackups:   1,
+			MaxLines:     10,
+			CopyTruncate: copyTruncate,
+		}
+		defer l.Close()
+		b := []byte("boo!\n")
+		n, err := l.Write(b)
+		isNil(err, t)
+		equals(len(b), n, t)
+
+		existsWithLines(filename, 1, t)
+		fileCount(dir, 1, t)
+
+		newFakeTime(time.Second)
+
+		err = l.Rotate()
+		isNil(err, t)
+
+		// we need to wait a little bit since the files get deleted on a different
+		// goroutine.
+		<-time.After(10 * time.Millisecond)
+
+		filename2 := backupFile(dir)
+		existsWithLines(filename2, 1, t)
+		existsWithLines(filename, 0, t)
+		fileCount(dir, 2, t)
+		newFakeTime(time.Second)
+
+		err = l.Rotate()
+		isNil(err, t)
+
+		// we need to wait a little bit since the files get deleted on a different
+		// goroutine.
+		<-time.After(10 * time.Millisecond)
+
+		filename3 := backupFile(dir)
+		existsWithLines(filename3, 0, t)
+		existsWithLines(filename, 0, t)
+		fileCount(dir, 2, t)
+
+		b2 := []byte("foooooo!\n")
+		n, err = l.Write(b2)
+		isNil(err, t)
+		equals(len(b2), n, t)
+
+		// this will use the new fake time
+		existsWithLines(filename, 1, t)
 	}
-	defer l.Close()
-	b := []byte("boo!\n")
-	n, err := l.Write(b)
-	isNil(err, t)
-	equals(len(b), n, t)
-
-	existsWithLines(filename, 1, t)
-	fileCount(dir, 1, t)
-
-	newFakeTime(time.Second)
-
-	err = l.Rotate()
-	isNil(err, t)
-
-	// we need to wait a little bit since the files get deleted on a different
-	// goroutine.
-	<-time.After(10 * time.Millisecond)
-
-	filename2 := backupFile(dir)
-	existsWithLines(filename2, 1, t)
-	existsWithLines(filename, 0, t)
-	fileCount(dir, 2, t)
-	newFakeTime(time.Second)
-
-	err = l.Rotate()
-	isNil(err, t)
-
-	// we need to wait a little bit since the files get deleted on a different
-	// goroutine.
-	<-time.After(10 * time.Millisecond)
-
-	filename3 := backupFile(dir)
-	existsWithLines(filename3, 0, t)
-	existsWithLines(filename, 0, t)
-	fileCount(dir, 2, t)
-
-	b2 := []byte("foooooo!\n")
-	n, err = l.Write(b2)
-	isNil(err, t)
-	equals(len(b2), n, t)
-
-	// this will use the new fake time
-	existsWithLines(filename, 1, t)
 }
 
 func TestJson(t *testing.T) {
@@ -544,7 +494,8 @@ copytruncate: false`[1:])
 // makeTempDir creates a file with a semi-unique name in the OS temp directory.
 // It should be based on the name of the test, to keep parallel tests from
 // colliding, and must be cleaned up after the test is finished.
-func makeTempDir(name string, t testing.TB) string {
+func makeTempDir(t testing.TB) string {
+	name := strings.ReplaceAll(t.Name(), "/", "")
 	dir := time.Now().Format(name + backupTimeFormat)
 	dir = filepath.Join(os.TempDir(), dir)
 	isNilUp(os.Mkdir(dir, 0700), t, 1)
