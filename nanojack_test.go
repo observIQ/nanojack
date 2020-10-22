@@ -29,6 +29,11 @@ func fakeTime() time.Time {
 	return fakeCurrentTime
 }
 
+// newFakeTime adds specified wait time to the fake "current time".
+func newFakeTime(wait time.Duration) {
+	fakeCurrentTime = fakeCurrentTime.Add(wait)
+}
+
 func TestNewFile(t *testing.T) {
 	currentTime = fakeTime
 
@@ -140,6 +145,70 @@ func TestAutoRotate(t *testing.T) {
 	existsWithLines(backupFile(dir), 1, t)
 
 	fileCount(dir, 2, t)
+}
+
+func TestSequentialRotate(t *testing.T) {
+	t.Run("MoveCreate", testSequentialRotate(t, false))
+	t.Run("CopyTruncate", testSequentialRotate(t, true))
+}
+
+func testSequentialRotate(t *testing.T, copyTruncate bool) func(t *testing.T) {
+
+	return func(t *testing.T) {
+		dir := makeTempDir(t)
+		defer os.RemoveAll(dir)
+
+		filename := logFile(dir)
+		bkpName1 := fmt.Sprintf("%s.1", filename)
+		bkpName2 := fmt.Sprintf("%s.2", filename)
+
+		l := &Logger{
+			Filename:   filename,
+			MaxLines:   1,
+			MaxBackups: 2,
+			Sequential: true,
+		}
+		defer l.Close()
+
+		fileCount(dir, 0, t)
+
+		one := []byte("1!\n")
+		n, err := l.Write(one)
+		require.NoError(t, err)
+		require.Equal(t, len(one), n)
+
+		fileCount(dir, 1, t)
+		existsWithLines(filename, 1, t)
+
+		two := []byte("two!\n")
+		n, err = l.Write(two)
+		require.NoError(t, err)
+		require.Equal(t, len(two), n)
+
+		fileCount(dir, 2, t)
+		existsWithLines(filename, 1, t)
+		existsWithLines(bkpName1, 1, t)
+
+		three := []byte("three!\n")
+		n, err = l.Write(three)
+		require.NoError(t, err)
+		require.Equal(t, len(three), n)
+
+		fileCount(dir, 3, t)
+		existsWithLines(filename, 1, t)
+		existsWithLines(bkpName1, 1, t)
+		existsWithLines(bkpName2, 1, t)
+
+		four := []byte("four!\n")
+		n, err = l.Write(four)
+		require.NoError(t, err)
+		require.Equal(t, len(four), n)
+
+		fileCount(dir, 3, t) // still 3
+		existsWithLines(filename, 1, t)
+		existsWithLines(bkpName1, 1, t)
+		existsWithLines(bkpName2, 1, t)
+	}
 }
 
 func TestFirstWriteRotate(t *testing.T) {
@@ -372,17 +441,10 @@ func TestOldLogFiles(t *testing.T) {
 func TestTimeFromName(t *testing.T) {
 	l := &Logger{Filename: "/var/log/myfoo/foo.log"}
 	prefix, ext := l.prefixAndExt()
-	val := l.timeFromName("foo-2014-05-04T14-44-33.555.log", prefix, ext)
-	require.Equal(t, "2014-05-04T14-44-33.555", val)
-
-	val = l.timeFromName("foo-2014-05-04T14-44-33.555", prefix, ext)
-	require.Equal(t, "", val)
-
-	val = l.timeFromName("2014-05-04T14-44-33.555.log", prefix, ext)
-	require.Equal(t, "", val)
-
-	val = l.timeFromName("foo.log", prefix, ext)
-	require.Equal(t, "", val)
+	require.Equal(t, "2014-05-04T14-44-33.555", l.timeFromName("foo-2014-05-04T14-44-33.555.log", prefix, ext))
+	require.Equal(t, "", l.timeFromName("foo-2014-05-04T14-44-33.555", prefix, ext))
+	require.Equal(t, "", l.timeFromName("2014-05-04T14-44-33.555.log", prefix, ext))
+	require.Equal(t, "", l.timeFromName("foo.log", prefix, ext))
 }
 
 func TestRotate(t *testing.T) {
@@ -520,11 +582,6 @@ func fileCount(dir string, expected int, t testing.TB) {
 	require.NoError(t, err)
 	// Make sure no other files were created.
 	require.Equal(t, expected, len(files))
-}
-
-// newFakeTime adds specified wait time to the fake "current time".
-func newFakeTime(wait time.Duration) {
-	fakeCurrentTime = fakeCurrentTime.Add(wait)
 }
 
 func notExist(path string, t testing.TB) {
