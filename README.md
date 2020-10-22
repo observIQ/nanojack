@@ -29,6 +29,7 @@ log.SetOutput(&nanojack.Logger{
     MaxLines:  5,
     MaxBackups: 3,
     CopyTruncate: false,
+    Sequential: false,
 })
 ```
 
@@ -50,11 +51,16 @@ type Logger struct {
     // is to retain all old log files.
     MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
 
-	// CopyTruncate defines the mechanism by which a file is backed up.
-	// By default a backup is created by renaming the old file and creating
-	// a new file in its place. If CopyTruncate is true, the old file will be
-	// copied to a new file and then truncated.
-	CopyTruncate bool `json:"copytruncate" yaml:"copytruncate"`
+    // CopyTruncate defines the mechanism by which a file is backed up.
+    // By default a backup is created by renaming the old file and creating
+    // a new file in its place. If CopyTruncate is true, the old file will be
+    // copied to a new file and then truncated.
+    CopyTruncate bool `json:"copytruncate" yaml:"copytruncate"`
+    
+    // Sequential defines whether backups are renamed by
+    // timestamp (example-2020-10-20T15-04-05.000000000.log) or
+    // by simple integer (example.log.1)
+    Sequential bool `json:"sequential" yaml:"sequential"`
 }
 ```
 Logger is an io.WriteCloser that writes to the specified filename.
@@ -67,13 +73,16 @@ the current file is closed, renamed, and a new log file created with the
 original name. Thus, the filename you give Logger is always the "current" log
 file.
 
-Backups use the log file name given to Logger, in the form `name-timestamp.ext`
-where name is the filename without the extension, timestamp is the time at which
-the log was rotated formatted with the time.Time format of
-`2006-01-02T15-04-05.000000000` and the extension is the original extension.  For
-example, if your Logger.Filename is `/var/log/foo/server.log`, a backup created
-at 6:30pm on Nov 11 2016 would use the filename
-`/var/log/foo/server-2016-11-04T18-30-00.000000000.log`
+Backup file names are derived from the log file name given to Logger, depending 
+on the configuration of the logger. If sequential backups are used, then backup
+file names are of the form `name.ext.N`, where `N` indicates the backup number.
+If the logger is not configured to use sequential backups, then backup files are
+named using the form `name-timestamp.ext` where name is the filename without the 
+extension, timestamp is the time at which the log was rotated formatted with the 
+time.Time format of `2006-01-02T15-04-05.000000000` and the extension is the 
+original extension.  For example, if your Logger.Filename is 
+`/var/log/foo/server.log`, a backup created at 6:30pm on Nov 11 2016 would use 
+the filename `/var/log/foo/server-2016-11-04T18-30-00.000000000.log`
 
 ### Cleaning Up Old Log Files
 Whenever a new logfile gets created, old log files may be deleted.  The most

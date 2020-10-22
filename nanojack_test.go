@@ -211,6 +211,31 @@ func testSequentialRotate(t *testing.T, copyTruncate bool) func(t *testing.T) {
 	}
 }
 
+func TestUnlimitedSequentialRotate(t *testing.T) {
+	dir := makeTempDir(t)
+	defer os.RemoveAll(dir)
+
+	filename := logFile(dir)
+	l := &Logger{
+		Filename:   filename,
+		MaxLines:   1,
+		MaxBackups: 0,
+		Sequential: true,
+	}
+	defer l.Close()
+
+	// test to a relatively large but arbitrary number
+	for i := 0; i < 42; i++ {
+
+		b := []byte("something!\n")
+		n, err := l.Write(b)
+		require.NoError(t, err)
+		require.Equal(t, len(b), n)
+
+		fileCount(dir, i+1, t)
+	}
+}
+
 func TestFirstWriteRotate(t *testing.T) {
 	currentTime = fakeTime
 	dir := makeTempDir(t)

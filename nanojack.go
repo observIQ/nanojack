@@ -230,28 +230,36 @@ func (l *Logger) backup() (err error) {
 func (l *Logger) backupSequential() (*os.File, error) {
 	name := l.filename()
 
-	maxBackupName := fmt.Sprintf("%s.%d", name, l.MaxBackups)
-
-	if fileExists(maxBackupName) {
-		// what am I going to do, log this?
-		_ = os.Remove(maxBackupName)
-	}
-
-	// rotate any remaining backups, but not the primary yet
-	for i := l.MaxBackups - 1; i > 0; i-- {
-		from := fmt.Sprintf("%s.%d", name, i)
-		to := fmt.Sprintf("%s.%d", name, i+1)
-
-		if !fileExists(from) {
-			continue
+	if l.MaxBackups == 0 {
+		cascade(name, 1)
+	} else {
+		maxBackupName := fmt.Sprintf("%s.%d", name, l.MaxBackups)
+		if fileExists(maxBackupName) {
+			_ = os.Remove(maxBackupName)
 		}
 
-		if _, err := move(from, to); err != nil {
-			return nil, err
-		}
+		cascade(name, 1)
 	}
 
 	return doMove(l.filename(), fmt.Sprintf("%s.%d", name, 1), l.CopyTruncate)
+}
+
+func cascade(name string, fromN int) error {
+	from := fmt.Sprintf("%s.%d", name, fromN)
+	to := fmt.Sprintf("%s.%d", name, fromN+1)
+
+	if !fileExists(from) {
+		return nil
+	}
+
+	if fileExists(to) {
+		if err := cascade(name, fromN+1); err != nil {
+			return err
+		}
+	}
+
+	_, err := move(from, to)
+	return err
 }
 
 func doMove(from, to string, copyTrunc bool) (*os.File, error) {
