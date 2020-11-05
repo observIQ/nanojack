@@ -215,6 +215,7 @@ func (l *Logger) backup() (err error) {
 	if l.Sequential {
 		f, err = l.backupSequential()
 	} else {
+		l.file.Close()
 		f, err = doMove(l.filename(), l.timestampedBackupName(), l.CopyTruncate)
 	}
 
@@ -241,7 +242,8 @@ func (l *Logger) backupSequential() (*os.File, error) {
 		cascade(name, 1)
 	}
 
-	return doMove(l.filename(), fmt.Sprintf("%s.%d", name, 1), l.CopyTruncate)
+	l.file.Close()
+	return doMove(name, fmt.Sprintf("%s.%d", name, 1), l.CopyTruncate)
 }
 
 func cascade(name string, fromN int) error {
