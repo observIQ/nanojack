@@ -324,9 +324,19 @@ func move(from, to string) (os.FileInfo, error) {
 
 func moveCreate(from, to string) (*os.File, error) {
 
-	info, err := move(from, to)
-	if err != nil {
-		return nil, err
+	tries := 0
+	var info os.FileInfo
+	var err error
+	for {
+		info, err = move(from, to)
+		if err != nil {
+			tries++
+			if tries > 20 {
+				return nil, err
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		break
 	}
 
 	// we use truncate here because this should only get called when we've moved
